@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滑动变阻器标准物理仿真</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;user-select:none;}
+        body{
+            font-family:Microsoft YaHei;
+            background:#e6f0fa;
+            padding:20px;
+        }
+        .container{
+            max-width:1300px;
+            margin:0 auto;
+        }
+        .title{
+            background:#fff;
+            padding:14px 20px;
+            border-radius:10px;
+            margin-bottom:12px;
+            text-align:center;
+            box-shadow:0 2px 5px #00000015;
+        }
+        .title h2{
+            color:#004080;
+            margin-bottom:6px;
+        }
+        .title p{
+            color:#444;
+            font-size:15px;
+        }
+        .panel{
+            display:flex;
+            gap:12px;
+            margin-bottom:12px;
+        }
+        .modes{
+            flex:2;
+            background:#fff;
+            padding:14px;
+            border-radius:10px;
+            box-shadow:0 2px 5px #00000015;
+        }
+        .status{
+            flex:1;
+            background:#fff;
+            padding:14px;
+            border-radius:10px;
+            box-shadow:0 2px 5px #00000015;
+            line-height:1.6;
+        }
+        .mode-grid{
+            display:grid;
+            grid-template-columns:repeat(3,1fr);
+            gap:8px;
+        }
+        .mode-btn{
+            padding:10px;
+            border:1px solid #cce5ff;
+            background:#f7fcff;
+            border-radius:6px;
+            cursor:pointer;
+            font-size:15px;
+        }
+        .mode-btn.active{
+            background:#0066cc;
+            color:white;
+            font-weight:bold;
+        }
+        .box{
+            background:#fff;
+            border-radius:10px;
+            padding:20px;
+            box-shadow:0 2px 5px #00000015;
+            position:relative;
+            margin-bottom:16px;
+        }
+        #canvas{
+            width:100%;
+            height:500px;
+            border:1px solid #cce5ff;
+            border-radius:8px;
+            background:#fafdff;
+            position:relative;
+        }
+        /* 接线柱 */
+        .term{
+            width:30px;
+            height:30px;
+            border-radius:50%;
+            background:#fff0b3;
+            border:3px solid #333;
+            position:absolute;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-weight:bold;
+            cursor:pointer;
+            z-index:10;
+        }
+        .term.selected{
+            background:#ff4444;
+            color:white;
+        }
+        /* 滑片 */
+        #slider{
+            width:50px;
+            height:30px;
+            background:#333;
+            border-radius:6px;
+            position:absolute;
+            cursor:grab;
+            z-index:9;
+        }
+        /* 灯泡 */
+        #lamp{
+            position:absolute;
+            font-size:70px;
+            transition:opacity 0.3s;
+        }
+        /* 导线 & 电流 */
+        .wire{
+            position:absolute;
+            height:4px;
+            background:#222;
+            z-index:2;
+        }
+        .dot{
+            width:10px;
+            height:10px;
+            border-radius:50%;
+            background:red;
+            position:absolute;
+            z-index:3;
+            opacity:0;
+        }
+        /* 实验表格样式，匹配PPT浅蓝色表格 */
+        .table-wrap{
+            background:#fff;
+            padding:20px;
+            border-radius:10px;
+            box-shadow:0 2px 5px #00000015;
+        }
+        table{
+            width:100%;
+            border-collapse: collapse;
+            background:#e6f0fa;
+        }
+        th,td{
+            border:1px solid #b4cbe8;
+            padding:10px 6px;
+            text-align:center;
+            font-size:14px;
+        }
+        th{
+            background:#c6def7;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="title">
+        <h2>滑动变阻器标准物理仿真</h2>
+        <p>支持：自由选接线柱 | 触屏拖拽滑片 | 动态电流 | 亮度真实变化 | 自动填充实验记录表</p>
+    </div>
+
+    <div class="panel">
+        <div class="modes">
+            <h4 style="margin-bottom:10px;color:#004080;">快捷标准接法</h4>
+            <div class="mode-grid">
+                <button class="mode-btn" data-m="AD">AD（序号1）</button>
+                <button class="mode-btn" data-m="AC">AC（序号2）</button>
+                <button class="mode-btn" data-m="BC">BC（序号3）</button>
+                <button class="mode-btn" data-m="BD">BD（序号4）</button>
+                <button class="mode-btn" data-m="AB">AB（序号5）</button>
+                <button class="mode-btn" data-m="CD">CD（序号6）</button>
+            </div>
+        </div>
+        <div class="status">
+            <div>当前接线：<span id="t">-</span></div>
+            <div>接入电阻段：<span id="zone">-</span></div>
+            <div>电路电流：<span id="cur">0.00</span> A</div>
+            <div>灯泡亮度：<span id="bright">-</span></div>
+        </div>
+    </div>
+
+    <div class="box">
+        <div id="canvas">
+            <!-- 变阻器 SVG 标准图 -->
+            <svg width="600" height="240" style="position:absolute; left:90px; top:120px; z-index:1;">
+                <line x1="0" y1="30" x2="600" y2="30" stroke="#333" stroke-width="4"></line>
+                <path d="M0,210 Q20,170 40,210 Q60,170 80,210 Q100,170 120,210 Q140,170 160,210 Q180,170 200,210 Q220,170 240,210 Q260,170 280,210 Q300,170 320,210 Q340,170 360,210 Q380,170 400,210 Q420,170 440,210 Q460,170 480,210 Q500,170 520,210 Q540,170 560,210 Q580,170 600,210" stroke="#333" stroke-width="3" fill="none"></path>
+                <line id="pline" x1="300" y1="30" x2="300" y2="150" stroke="#333" stroke-width="3"></line>
+                <text x="-10" y="25" font-size="22" fill="#000">C</text>
+                <text x="605" y="25" font-size="22" fill="#000">D</text>
+                <text x="-10" y="235" font-size="22" fill="#000">A</text>
+                <text x="605" y="235" font-size="22" fill="#000">B</text>
+                <text x="310" y="170" font-size="24" fill="red">P</text>
+            </svg>
+
+            <!-- 四个接线柱 -->
+            <div class="term" data-n="C" style="left:80px; top:110px;">C</div>
+            <div class="term" data-n="D" style="left:690px; top:110px;">D</div>
+            <div class="term" data-n="A" style="left:80px; top:290px;">A</div>
+            <div class="term" data-n="B" style="left:690px; top:290px;">B</div>
+
+            <!-- 滑片 -->
+            <div id="slider" style="left:275px; top:150px;"></div>
+
+            <!-- 灯泡 -->
+            <div id="lamp" style="left:450px; top:350px;">💡</div>
+
+            <!-- 电流粒子 -->
+            <div class="dot" id="dot"></div>
+            <div id="wires"></div>
+        </div>
+    </div>
+
+    <!-- 和PPT完全匹配的实验记录表格 -->
+    <div class="table-wrap">
+        <h3 style="margin-bottom:12px;color:#004080;">实验记录表格（切换接法自动填充）</h3>
+        <table id="expTable">
+            <thead>
+                <tr>
+                    <th>序号</th>
+                    <th>接线柱</th>
+                    <th>电流的路径</th>
+                    <th>接入电路部分</th>
+                    <th>灯亮度是否变化</th>
+                    <th>电流是否变化</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr id="row1">
+                    <td>1</td>
+                    <td>A、D</td>
+                    <td class="path">-</td>
+                    <td class="part">-</td>
+                    <td class="lampChange">-</td>
+                    <td class="currChange">-</td>
+                </tr>
+                <tr id="row2">
+                    <td>2</td>
+                    <td>A、C</td>
+                    <td class="path">-</td>
+                    <td class="part">-</td>
+                    <td class="lampChange">-</td>
+                    <td class="currChange">-</td>
+                </tr>
+                <tr id="row3">
+                    <td>3</td>
+                    <td>B、C</td>
+                    <td class="path">-</td>
+                    <td class="part">-</td>
+                    <td class="lampChange">-</td>
+                    <td class="currChange">-</td>
+                </tr>
+                <tr id="row4">
+                    <td>4</td>
+                    <td>B、D</td>
+                    <td class="path">-</td>
+                    <td class="part">-</td>
+                    <td class="lampChange">-</td>
+                    <td class="currChange">-</td>
+                </tr>
+                <tr id="row5">
+                    <td>5</td>
+                    <td>A、B</td>
+                    <td class="path">-</td>
+                    <td class="part">-</td>
+                    <td class="lampChange">-</td>
+                    <td class="currChange">-</td>
+                </tr>
+                <tr id="row6">
+                    <td>6</td>
+                    <td>C、D</td>
+                    <td class="path">-</td>
+                    <td class="part">-</td>
+                    <td class="lampChange">-</td>
+                    <td class="currChange">-</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const slider = document.getElementById('slider');
+const lamp = document.getElementById('lamp');
+const dot = document.getElementById('dot');
+const wires = document.getElementById('wires');
+const terms = document.querySelectorAll('.term');
+const btns = document.querySelectorAll('.mode-btn');
+
+const txtT = document.getElementById('t');
+const txtZone = document.getElementById('zone');
+const txtCur = document.getElementById('cur');
+const txtBright = document.getElementById('bright');
+const pline = document.getElementById('pline');
+
+let selected = [];
+let drag = false;
+let sx = 275;
+const min = 100, max = 650;
+
+// 映射：快捷按钮标识 → 接线柱、表格行号、实验数据
+const map = {
+    AD:{term:['A','D'],row:'row1',path:'电源→A→AP→P→D→电源',part:'AP',lamp:'√',curr:'√'},
+    AC:{term:['A','C'],row:'row2',path:'电源→A→AP→P→C→电源',part:'AP',lamp:'√',curr:'√'},
+    BC:{term:['B','C'],row:'row3',path:'电源→B→BP→P→C→电源',part:'BP',lamp:'√',curr:'√'},
+    BD:{term:['B','D'],row:'row4',path:'电源→B→BP→P→D→电源',part:'BP',lamp:'√',curr:'√'},
+    AB:{term:['A','B'],row:'row5',path:'电源→A→全部电阻丝→B→电源',part:'AB',lamp:'×',curr:'×'},
+    CD:{term:['C','D'],row:'row6',path:'电源→C→金属杆→D→电源',part:'CD',lamp:'×',curr:'×'}
+};
+
+// 切换快捷按钮，自动填充表格
+btns.forEach(b=>{
+    b.onclick=()=>{
+        btns.forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        const key = b.dataset.m;
+        const data = map[key];
+        selected = [...data.term];
+        // 自动填充表格对应行
+        fillTableRow(data.row, data.path, data.part, data.lamp, data.curr);
+        refresh();
+    }
+});
+
+// 填充表格单行函数
+function fillTableRow(rowId, pathText, partText, lampMark, currMark){
+    const rowDom = document.getElementById(rowId);
+    rowDom.querySelector('.path').innerText = pathText;
+    rowDom.querySelector('.part').innerText = partText;
+    rowDom.querySelector('.lampChange').innerText = lampMark;
+    rowDom.querySelector('.currChange').innerText = currMark;
+}
+
+terms.forEach(t=>{
+    t.onclick=()=>{
+        const n = t.dataset.n;
+        if(selected.includes(n)){
+            selected = selected.filter(x=>x!=n);
+        }else{
+            if(selected.length>=2) selected.shift();
+            selected.push(n);
+        }
+        btns.forEach(x=>x.classList.remove('active'));
+        refresh();
+    }
+});
+
+// 拖拽滑片
+slider.onmousedown = e=>{drag=true};
+document.onmousemove=e=>{
+    if(!drag) return;
+    let x = e.clientX - canvas.getBoundingClientRect().left - 25;
+    sx = Math.max(min, Math.min(max, x));
+    slider.style.left = sx + 'px';
+    pline.setAttribute('x1', sx+25);
+    pline.setAttribute('x2', sx+25);
+    refresh();
+};
+document.onmouseup = ()=>{drag=false};
+
+// 触屏支持
+slider.addEventListener('touchstart',()=>{drag=true});
+document.addEventListener('touchmove',e=>{
+    if(!drag) return;
+    let x = e.touches[0].clientX - canvas.getBoundingClientRect().left -25;
+    sx = Math.max(min, Math.min(max, x));
+    slider.style.left = sx+'px';
+    pline.setAttribute('x1',sx+25);
+    pline.setAttribute('x2',sx+25);
+    refresh();
+});
+document.addEventListener('touchend',()=>{drag=false});
+
+function refresh(){
+    terms.forEach(t=>t.classList.toggle('selected', selected.includes(t.dataset.n)));
+    txtT.textContent = selected.join('、') || '未选';
+    wires.innerHTML = '';
+
+    if(selected.length!=2){
+        off();
+        return;
+    }
+
+    const s = selected.sort().join('');
+    let r=0, zone='', valid=true;
+
+    if(s=='AB'){
+        zone='全部电阻丝'; r=0.1;
+    }else if(s=='CD'){
+        zone='金属杆(无电阻)'; r=0.95;
+    }else if(s=='AC'||s=='AD'){
+        zone='AP段'; r = 1 - ((sx-min)/(max-min));
+    }else if(s=='BC'||s=='BD'){
+        zone='BP段'; r = (sx-min)/(max-min);
+    }else{
+        valid=false; off(); return;
+    }
+
+    r=Math.max(0.05, Math.min(0.95, r));
+    lamp.style.opacity = 0.1 + r*0.9;
+    txtCur.textContent = r.toFixed(2);
+    txtZone.textContent = zone;
+
+    if(r<0.3) txtBright.textContent='很暗';
+    else if(r<0.7) txtBright.textContent='中等';
+    else txtBright.textContent='很亮';
+
+    dot.style.opacity=1;
+    flow();
+}
+
+function off(){
+    lamp.style.opacity=0.1;
+    txtCur.textContent='0.00';
+    txtZone.textContent='未接通/无效';
+    txtBright.textContent='熄灭';
+    dot.style.opacity=0;
+}
+
+function flow(){
+    let t1 = document.querySelector(`.term[data-n="${selected[0]}"]`);
+    let t2 = document.querySelector(`.term[data-n="${selected[1]}"]`);
+    let r1 = t1.getBoundingClientRect();
+    let r2 = t2.getBoundingClientRect();
+    let rt = canvas.getBoundingClientRect();
+    let x1 = r1.left-rt.left+15;
+    let y1 = r1.top-rt.top+15;
+    let x2 = r2.left-rt.left+15;
+    let y2 = r2.top-rt.top+15;
+    let p=0;
+    function run(){
+        p+=0.02; if(p>1)p=0;
+        let x = x1+(x2-x1)*p;
+        let y = y1+(y2-y1)*p;
+        dot.style.left = x+'px';
+        dot.style.top = y+'px';
+        requestAnimationFrame(run);
+    }
+    run();
+}
+
+// 默认打开AD（表格序号1）
+window.onload=()=>{document.querySelector('.mode-btn[data-m="AD"]').click()};
+</script>
+</body>
+</html>
